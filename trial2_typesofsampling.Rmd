@@ -1,0 +1,88 @@
+---
+title: "Types of Sampling"
+output: pdf_document
+---
+
+## Types of Sampling
+```{r}
+source('setup.R')
+set.seed(98)
+nsims = 1000
+
+#500 individuals, simple random sampling
+srs.biases = createlist(length(rho),nsims,length(coeffs))
+#500 individuals, 10 taken from each county
+stratified.biases = createlist(length(rho),nsims,length(coeffs))
+#500 individuals, all of the first five counties
+fivecounties.biases = createlist(length(rho),nsims,length(coeffs))
+
+for (i in 1:nsims){
+  for (j in 1:length(rho)){
+    sim = simfunc(mean1 = rnorm(n.counties, mean = 1, sd = 0.1), mean2 = rnorm(n.counties, mean = 1, sd = 0.1), N = 100, mu = rep(0.05, n.counties), alpha = 1, beta = 2, rho = rho[j])
+    aggdata = as.data.frame(cbind(y=sim$y, airpollution = sim$group.airpollution, income = sim$group.income))
+
+indivdata = as.data.frame(cbind(y = sim$case, airpollution = sim$indiv.airpollution, income = sim$indiv.income))
+
+#SRS
+indivdata.new1 = indivdata[sample(nrow(indivdata), 500), ]
+agg.indiv.eco1 = eco(cbind(y, N) ~ 1, normal = ~airpollution + income, iformula = y ~ airpollution + income, data = aggdata, idata=indivdata.new1)
+  srs.biases[[j]][i,] = log(c(agg.indiv.eco1$ors.ctx[,1],agg.indiv.eco1$ors.indiv[,1])) - coeffs
+
+#Stratified
+  indivdata.new2 = indivdata[seq(1, nrow(indivdata), 10), ]
+  agg.indiv.eco2 = eco(cbind(y, N) ~ 1, normal = ~airpollution + income, iformula = y ~ airpollution + income, data = aggdata, idata=indivdata.new2)
+  stratified.biases[[j]][i,] = log(c(agg.indiv.eco2$ors.ctx[,1],agg.indiv.eco2$ors.indiv[,1])) - coeffs
+  
+#All of five counties
+  indivdata.new3 = indivdata[1:500, ]
+  agg.indiv.eco3 = eco(cbind(y, N) ~ 1, normal = ~airpollution + income, iformula = y ~ airpollution + income, data = aggdata, idata=indivdata.new3)
+  fivecounties.biases[[j]][i,] = log(c(agg.indiv.eco3$ors.ctx[,1],agg.indiv.eco3$ors.indiv[,1])) - coeffs
+  }
+}
+```
+
+## Plots
+```{r}
+mu.srs = bindmeans(srs.biases,1)
+alpha.srs = bindmeans(srs.biases,2)
+beta.srs = bindmeans(srs.biases,3)
+
+mu.stratified = bindmeans(stratified.biases,1)
+alpha.stratified = bindmeans(stratified.biases,2)
+beta.stratified = bindmeans(stratified.biases,3)
+
+mu.fivecounties = bindmeans(fivecounties.biases,1)
+alpha.fivecounties = bindmeans(fivecounties.biases,2)
+beta.fivecounties = bindmeans(fivecounties.biases,3)
+
+
+## PLOTS
+jpeg("mu.diffsampling.jpg", width = 500, height = 350)
+plot(rho, mu.srs, type = 'l', ylab = 'bias', xlab = 'Cov(Xi,Zi)', ylim = c(-1,1), main = 'Bias of muhat', col = 'red', xaxt="n")
+axis(1, at = seq(-1, 1, by = 0.25))
+lines(rho, mu.stratified, col = 'black')
+lines(rho, mu.fivecounties, col = 'blue')
+legend("topright", legend=c("SRS", "Stratified", "FiveCounties"),
+       col=c("red", "black", "blue"), lty=c(1,1,1), cex=0.8)
+
+jpeg("alpha.diffsampling.jpg", width = 500, height = 350)
+plot(rho, alpha.srs, type = 'l', ylab = 'bias', xlab = 'Cov(Xi,Zi)', ylim = c(-1,1), main = 'Bias of alphahat', col = 'red', xaxt="n")
+axis(1, at = seq(-1, 1, by = 0.25))
+lines(rho, alpha.stratified, col = 'black')
+lines(rho, alpha.fivecounties, col = 'blue')
+legend("topright", legend=c("SRS", "Stratified", "FiveCounties"),
+       col=c("red", "black", "blue"), lty=c(1,1,1), cex=0.8)
+
+jpeg("beta.diffsampling.jpg", width = 500, height = 350)
+plot(rho, beta.srs, type = 'l', ylab = 'bias', xlab = 'Cov(Xi,Zi)', ylim = c(-1,1), main = 'Bias of betahat', col = 'red', xaxt="n")
+axis(1, at = seq(-1, 1, by = 0.25))
+lines(rho, beta.stratified, col = 'black')
+lines(rho, beta.fivecounties, col = 'blue')
+legend("topright", legend=c("SRS", "Stratified", "FiveCounties"),
+       col=c("red", "black", "blue"), lty=c(1,1,1), cex=0.8)
+```
+
+
+
+
+

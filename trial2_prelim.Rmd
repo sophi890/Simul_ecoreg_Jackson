@@ -1,0 +1,82 @@
+---
+title: "Initial Comparison of Individual, Group, and Hierarchical Models"
+output: pdf_document
+---
+
+```{r}
+source('setup.R')
+```
+
+## Check for zero correlation no bias 
+```{r}
+set.seed(98)
+nsims = 1000
+
+agg.biases = createlist(length(rho),nsims,length(coeffs))
+indiv.biases = createlist(length(rho),nsims,length(coeffs))
+agg.indiv.biases = createlist(length(rho),nsims,length(coeffs))
+
+for (i in 1:nsims){
+  for (j in 1:length(rho)){
+    sim = simfunc(mean1 = rnorm(n.counties, mean = 1, sd = 0.1), mean2 = rnorm(n.counties, mean = 1, sd = 0.1), N = 100, mu = rep(0.05, n.counties), alpha = 1, beta = 2, rho = rho[j])
+    aggdata <- as.data.frame(cbind(y=sim$y, airpollution = sim$group.airpollution, income = sim$group.income))
+    indivdata <- as.data.frame(cbind(y = sim$case, airpollution = sim$indiv.airpollution, income = sim$indiv.income))
+    indivdata.new <- indivdata[sample(nrow(indivdata), 500), ] #sample 500 individuals at random
+    
+    #Logistic regression on aggregate data
+    agg.glm <- glm(cbind(y, N-y)~airpollution+income, data = aggdata, family = 'binomial')
+    
+    #Logistic regression on individual data
+    indiv.glm <- glm(y~airpollution+income, family = 'binomial', data = indivdata)
+    
+    #Fit model on aggregate and individual data
+    agg.indiv.eco <- eco(cbind(y, N) ~ 1, normal = ~airpollution + income, iformula = y ~ airpollution + income, data = aggdata, idata=indivdata.new)
+    
+    agg.biases[[j]][i,] = coefficients(agg.glm) - coeffs
+    indiv.biases[[j]][i,] = coefficients(indiv.glm) - coeffs
+    agg.indiv.biases[[j]][i,] = log(c(agg.indiv.eco$ors.ctx[,1],agg.indiv.eco$ors.indiv[,1])) - coeffs
+  }
+}
+```
+
+## Plot coefficients vs covariance
+## Line plots
+```{r}
+mu.agg = bindmeans(agg.biases,1)
+alpha.agg = bindmeans(agg.biases,2)
+beta.agg = bindmeans(agg.biases, 3)
+
+mu.indiv = bindmeans(indiv.biases,1)
+alpha.indiv = bindmeans(indiv.biases,2)
+beta.indiv = bindmeans(indiv.biases, 3)
+
+mu.agg.indiv = bindmeans(agg.indiv.biases,1)
+alpha.agg.indiv = bindmeans(agg.indiv.biases,2)
+beta.agg.indiv = bindmeans(agg.indiv.biases, 3)
+
+##########
+jpeg("mu.jpg", width = 500, height = 350)
+plot(rho, mu.agg, type = 'l', ylab = 'bias', xlab = 'Cov(Xi,Zi)', ylim = c(-1,1), main = 'Bias of muhat', col = 'red', xaxt="n")
+axis(1, at = seq(-1, 1, by = 0.25))
+lines(rho, mu.indiv, col = 'black')
+lines(rho, mu.agg.indiv, col = 'blue')
+legend("topright", legend=c("Group", "Individual", "Hierarchical"),
+       col=c("red", "black", "blue"), lty=c(1,1,1), cex=0.8)
+
+jpeg("alpha.jpg", width = 500, height = 350)
+plot(rho, alpha.agg, type = 'l', ylab = 'bias', xlab = 'Cov(Xi,Zi)', ylim = c(-1,1), main = 'Bias of alphahat', col = 'red', xaxt="n")
+axis(1, at = seq(-1, 1, by = 0.25))
+lines(rho, alpha.indiv, col = 'black')
+lines(rho, alpha.agg.indiv, col = 'blue')
+legend("topright", legend=c("Group", "Individual", "Hierarchical"),
+       col=c("red", "black", "blue"), lty=c(1,1,1), cex=0.8)
+
+jpeg("beta.jpg", width = 500, height = 350)
+plot(rho, beta.agg, type = 'l', ylab = 'bias', xlab = 'Cov(Xi,Zi)', ylim = c(-1,1), main = 'Bias of betahat', col = 'red', xaxt="n")
+axis(1, at = seq(-1, 1, by = 0.25))
+lines(rho, beta.indiv, col = 'black')
+lines(rho, beta.agg.indiv, col = 'blue')
+legend("topright", legend=c("Group", "Individual", "Hierarchical"),
+       col=c("red", "black", "blue"), lty=c(1,1,1), cex=0.8)
+```
+

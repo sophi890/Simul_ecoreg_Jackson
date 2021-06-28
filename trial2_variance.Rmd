@@ -1,0 +1,104 @@
+---
+title: "Variance Estimators"
+output: pdf_document
+---
+
+## Two functions for variance estimation
+```{r}
+source('setup.R')
+
+#Estimated variance matrices from stratified sampling
+var.est = function(vector1,vector2,N){
+  sigmas = list()
+  for (i in 1:n.counties){
+    var1 = var(vector1[((i-1)*N + 1):(i*N)])
+    var2 = var(vector2[((i-1)*N + 1):(i*N)])
+    cov12 = cov(vector1[((i-1)*N + 1):(i*N)], vector2[((i-1)*N + 1):(i*N)])
+    sigmas[[i]] = matrix(c(var1,cov12,cov12,var2), nrow = 2, ncol = 2)
+  }
+  return(sigmas)
+}
+
+#true variance
+truevar = function(rho,n.counties){
+  sigmas = list()
+  for (i in 1:n.counties){
+    sigmas[[i]] = matrix(c(1,rho,rho,1), nrow = 2, ncol = 2)
+  }
+  return(sigmas)
+}
+```
+
+## Simulation
+```{r}
+set.seed(98)
+nsims = 1000
+
+truevar.biases = createlist(length(rho),nsims,length(coeffs))
+sampledvar.biases = createlist(length(rho),nsims,length(coeffs))
+defaultvar.biases = createlist(length(rho),nsims,length(coeffs))
+
+
+for (i in 1:nsims){
+  for (j in 1:length(rho)){
+    sim = simfunc(mean1 = rnorm(n.counties, mean = 1, sd = 0.1), mean2 = rnorm(n.counties, mean = 1, sd = 0.1), N = 100, mu = rep(0.05, n.counties), alpha = 1, beta = 2, rho = rho[j])
+    aggdata <- as.data.frame(cbind(y=sim$y, airpollution = sim$group.airpollution, income = sim$group.income))
+  
+    indivdata <- as.data.frame(cbind(y = sim$case, airpollution = sim$indiv.airpollution, income = sim$indiv.income))
+
+    indivdata.new = indivdata[seq(1, nrow(indivdata), 10), ]
+
+    true.variance = truevar(rho = rho[j],n.counties = n.counties)
+    agg.indiv.eco.truevar = eco(cbind(y, N) ~ 1, normal = ~airpollution + income, iformula = y ~ airpollution + income, data = aggdata, idata=indivdata.new, norm.var = true.variance)
+
+    agg.indiv.eco.sampledvar = eco(cbind(y, N) ~ 1, normal = ~airpollution + income, iformula = y ~ airpollution + income, data = aggdata, idata=indivdata.new, norm.var = var.est(indivdata.new$airpollution,indivdata.new$income, 10))
+
+    agg.indiv.eco.defaultvar = eco(cbind(y, N) ~ 1, normal = ~airpollution + income, iformula = y ~ airpollution + income, data = aggdata, idata=indivdata.new)
+
+    truevar.biases[[j]][i,] = log(c(agg.indiv.eco.truevar$ors.ctx[,1],agg.indiv.eco.truevar$ors.indiv[,1])) - coeffs
+    sampledvar.biases[[j]][i,] = log(c(agg.indiv.eco.sampledvar$ors.ctx[,1],agg.indiv.eco.sampledvar$ors.indiv[,1])) - coeffs
+    defaultvar.biases[[j]][i,] = log(c(agg.indiv.eco.defaultvar$ors.ctx[,1],agg.indiv.eco.defaultvar$ors.indiv[,1])) - coeffs
+  }
+}
+```
+
+## Plots
+```{r}
+mu.truevar = bindmeans(truevar.biases,1)
+alpha.truevar = bindmeans(truevar.biases,2)
+beta.truevar = bindmeans(truevar.biases,3)
+
+mu.sampledvar = bindmeans(sampledvar.biases,1)
+alpha.sampledvar = bindmeans(sampledvar.biases,2)
+beta.sampledvar = bindmeans(sampledvar.biases,3)
+
+mu.defaultvar = bindmeans(defaultvar.biases,1)
+alpha.defaultvar = bindmeans(defaultvar.biases,2)
+beta.defaultvar = bindmeans(defaultvar.biases,3)
+
+###########
+jpeg("mu.var.jpg", width = 500, height = 350)
+plot(rho, mu.truevar, type = 'l', ylab = 'bias', xlab = 'Cov(Xi,Zi)', ylim = c(-1,1), main = 'Bias of muhat', col = 'red', xaxt="n")
+axis(1, at = seq(-1, 1, by = 0.25))
+lines(rho, mu.sampledvar, col = 'black')
+lines(rho, mu.defaultvar, col = 'blue')
+legend("topright", legend=c("True Var/Cov", "Var/Cov from Stratified Sampling", "No Var/Cov provided"),
+       col=c("red", "black", "blue"), lty=c(1,1,1), cex=0.8)
+
+jpeg("alpha.var.jpg", width = 500, height = 350)
+plot(rho, alpha.truevar, type = 'l', ylab = 'bias', xlab = 'Cov(Xi,Zi)', ylim = c(-1,1), main = 'Bias of alphahat', col = 'red', xaxt="n")
+axis(1, at = seq(-1, 1, by = 0.25))
+lines(rho, alpha.sampledvar, col = 'black')
+lines(rho, alpha.defaultvar, col = 'blue')
+legend("topright", legend=c("True Var/Cov", "Var/Cov from Stratified Sampling", "No Var/Cov provided"), col=c("red", "black", "blue"), lty=c(1,1,1), cex=0.8)
+
+jpeg("beta.var.jpg", width = 500, height = 350)
+plot(rho, beta.truevar, type = 'l', ylab = 'bias', xlab = 'Cov(Xi,Zi)', ylim = c(-1,1), main = 'Bias of betahat', col = 'red', xaxt="n")
+axis(1, at = seq(-1, 1, by = 0.25))
+lines(rho, beta.sampledvar, col = 'black')
+lines(rho, beta.defaultvar, col = 'blue')
+legend("topright", legend=c("True Var/Cov", "Var/Cov from Stratified Sampling", "No Var/Cov provided"), col=c("red", "black", "blue"), lty=c(1,1,1), cex=0.8)
+```
+
+
+
